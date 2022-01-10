@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="pt">
+
+<head>
+    <meta charset="UTF-8">
+    <title>BengueBall</title>
+
+    <link type="text/css" href="bootstrap.css" rel="stylesheet">
+    <link type="text/css" href="estilo.css" rel="stylesheet">
+
+    <script src="sprite.js"></script>
+    <style>
+        canvas {
+            position: absolute;
+            top: 0px;
+            bottom: 0px;
+            left: 0px;
+            right: 0px;
+            margin: auto;
+        }
+    </style>
+</head>
+
+<body style="background: url(fda.jpg)">
+    <script>
+        //variáveis do jogo
+        var canvas, ctx, ALTURA, LARGURA, maxPulos = 3, velocidade = 6, estadoAtual, record, img,
+
+            //vamos criar aqui uma variavel para controlar as fases.
+
+            pontosParaNovaFase = [5, 10, 20, 30],
+            faseActual = 0,
+
+            //Função para mostrar a mudança de nivel na tela, na medida que o usuario vai jogando...
+            labelNovaFase = {
+                texto: "",
+                opacidade: 0.0,
+
+                fadeIn: function (dt) {
+                    var fadeInId = setInterval(function () {
+                        if (labelNovaFase.opacidade < 1.0)
+                            labelNovaFase.opacidade += 0.01;
+                        else {
+                            clearInterval(fadeInId);
+                        }
+
+                    }, 10 * dt);
+                },
+                fadeOut: function (dt) {
+                    var fadeOutId = setInterval(function () {
+                        if (labelNovaFase.opacidade > 1.0)
+                            labelNovaFase.opacidade -= 0.01;
+                        else {
+                            clearInterval(fadeOutId);
+                        }
+                    }, 10 * dt);
+                }
+
+            },
+
+
+            estados = {
+                jogar: 0,
+                jogando: 1,
+                perdeu: 2
+
+            },
+            /*Vamos criar aqui uma variável chamada "Chão", que vai permitir receber
+            muitos atributos*/
+
+            chao = {
+                y: 550,
+                x: 0,
+                altura: 50,
+                // cor: "#ffdf70",
+                atualiza: function () {
+
+                    //essa condição vai fazer o chão rodar/repetir varias vezes, para dar a
+                    //impressão que ele está andando.
+
+                    this.x -= velocidade;
+                    if (this.x <= -30)
+                        this.x += 30;
+
+                },
+                //Aqui vamos formatar o chão. como ele vai ser estático, vamos criar um metodo dentro dele
+                desenha: function () {
+
+                    spriteChao.desenha(this.x, this.y);
+                    spriteChao.desenha(this.x + spriteChao.largura, this.y);
+
+
+                }
+            },
+            bloco = {
+                x: 60,
+                y: 0,
+                altura: spriteBoneco.altura,
+                largura: spriteBoneco.largura,
+                // cor: "#000000",
+                gravidade: 1.8,
+                velocidade: 0,
+                forcaDoPulo: 24,
+                qntPulos: 0,
+                score: 0,
+                rotacao: 0,
+
+                vidas: 3,
+                colidindo: false,
+
+                atualiza: function () {
+                    this.velocidade += this.gravidade;
+                    this.y += this.velocidade;
+                    this.rotacao += Math.PI / 180 * velocidade;
+
+                    if (this.y > chao.y - this.altura && estadoAtual != estados.perdeu) {
+                        this.y = chao.y - this.altura;
+                        this.qntPulos = 0;
+                        this.velocidade = 0;
+
+                    }
+                },
+                pula: function () {
+                    if (this.qntPulos < maxPulos) {
+                        this.velocidade = -this.forcaDoPulo;
+                        this.qntPulos++;
+
+                    }
+
+                },
+                reset: function () {
+                    this.velocidade = 0;
+
+                    this.vidas = 3;
+                    this.y = 0;
+
+                    this.gravidade = 1.6;
+                    velocidade = 6;
+                    faseActual = 0;
+
+                    if (this.score > record) {
+                        localStorage.setItem("record", this.score);
+                        record = this.score;
+
+                    }
+                    this.score = 0;
+
+
+                },
+                desenha: function () {
+                    ctx.save();
+                    //Operacao para rotacionar o boneco
+
+                    ctx.translate(this.x + this.largura / 2, this.y + this.altura / 2);
+                    ctx.rotate(this.rotacao);
+                    spriteBoneco.desenha(-this.largura / 2, -this.altura / 2);
+
+                    ctx.restore();
+
+                }
+            },
+            obstaculo = {
+                _obs: [],
+                _scored: false,
+                _sprites: [redObstacle, pinkObstacle, blueObstacle, greenObstacle, yellowObstacle],
+                tempoInsere: 0,
+
+                insere: function () {
+                    this._obs.push({
+                        x: LARGURA,
+                        largura: 30 + Math.floor(21 * Math.random()),
+                        altura: 30 + Math.floor(50 * Math.random()),
+                        y: chao.y - Math.floor(30 + Math.random() * 90),
+                        largura: 30,
+                        sprite: this._sprites[Math.floor(this._sprites.length * Math.random())]
+                    });
+                    this.tempoInsere = 30 + Math.floor(21 * Math.random());
+                },
+                atualiza: function () {
+
+                    if (this.tempoInsere == 0)
+                        this.insere();
+                    else
+                        this.tempoInsere--;
+                    for (var i = 0, tam = this._obs.length; i < tam; i++) {
+                        var obs = this._obs[i];
+                        obs.x -= velocidade;
+
+                        //essa condição vai verificar a vida do personagem. caso ainda tenha, vai continuar a jogar até as vidas terminarem.
+                        if (!bloco.colidindo && obs.x <= bloco.x + bloco.largura &&
+                            bloco.x <= obs.x + obs.largura && obs.y <= bloco.y + bloco.altura) {
+
+                            bloco.colidindo = true;
+
+                            setTimeout(function () {
+                                bloco.colidindo = false;
+
+                            }, 500);
+                            if (bloco.vidas >= 1)
+                                bloco.vidas--;
+                            else
+                                estadoAtual = estados.perdeu;
+                        }
+                        else if (obs.x == 0 && !obs._scored) {
+                            bloco.score++;
+                            obs._scored = true;
+
+                            if (faseActual < pontosParaNovaFase &&
+                                bloco.score == pontosParaNovaFase[faseActual])
+                                passarDeFase();
+
+                        }
+
+
+                        else if (obs.x <= -obs.largura) {
+                            this._obs.splice(i, 1);
+                            tam--;
+                            i--;
+                        }
+                    }
+
+                },
+
+                limpa: function () {
+
+                    this._obs = [];
+
+                },
+                desenha: function () {
+                    for (var i = 0, tam = this._obs.length; i < tam; i++) {
+                        var obs = this._obs[i];
+
+                        obs.sprite.desenha(obs.x, obs.y);
+                    }
+
+                }
+            };
+        function clique(event) {
+
+            if (estadoAtual == estados.jogando)
+                bloco.pula();
+            else if (estadoAtual == estados.jogar) {
+                estadoAtual = estados.jogando;
+            }
+            else if (estadoAtual == estados.perdeu) { /*  && bloco.y >= 2*ALTURA, vai permitir com que, assim que perder, em um click volta-se a jogar*/
+                estadoAtual = estados.jogar;
+                obstaculo.limpa();
+                bloco.reset();
+            }
+        }
+
+        function passarDeFase() {
+            velocidade++;
+            faseActual++;
+            bloco.vidas++;
+
+            if (faseActual == 4)
+                bloco.gravidade *= 0.6;
+
+            labelNovaFase.texto = "Nível " + faseActual;
+            labelNovaFase.fadeIn(0.4);
+
+            setTimeout(function () {
+                labelNovaFase.fadeOut(0.4);
+            }, 800);
+
+        }
+
+        function main() {
+            ALTURA = window.innerHeight;
+            LARGURA = window.innerWidth;
+            //essa condição vai permitir a janela ser forçada
+            // à uma altura ou largura ajustada.
+            if (LARGURA >= 500) {
+                LARGURA = 600;
+                ALTURA = 600;
+            }
+            canvas = document.createElement("canvas");
+            canvas.width = LARGURA;
+            canvas.height = ALTURA;
+            canvas.style.border = "1px solid #000";
+
+            //momento para incorporar as nossas "canvas" no docment html
+            ctx = canvas.getContext("2d");
+            document.body.appendChild(canvas);
+            //quanto aos cliques vamos criar um documento para a realização
+            document.addEventListener("mousedown", clique);
+            estadoAtual = estados.jogar;
+            record = localStorage.getItem("record");
+            if (record == null)
+                record = 0;
+
+            img = new Image();
+            img.src = "gato.png";
+            roda();
+        }
+
+        function roda() {
+            atualiza();
+            desenha();
+            //aqui vamos actualizar e desenhar o nosso jogo.
+            //mas para transformá-lo num lupi infinito, vamos usar o comando abaixo.
+            requestAnimationFrame(roda);
+        }
+
+        function atualiza() {
+            //quando actualizamos, estamos a somar os nossos frames. logo...
+
+            if (estadoAtual == estados.jogando)
+                obstaculo.atualiza();
+            chao.atualiza();
+            bloco.atualiza();
+
+        }
+
+        function desenha() {
+            bg.desenha(0, 0);
+
+            ctx.fillStyle = "#fff";
+            ctx.font = "40px Arial";
+            ctx.fillText(bloco.score, 25, 65);
+            ctx.fillText(bloco.vidas, 554, 65)
+
+            ctx.fillStyle = "rgba(0, 0, 0, " + labelNovaFase.opacidade + ")";
+            ctx.fillText(labelNovaFase.texto, canvas.width / 2 - ctx.measureText(labelNovaFase.texto).width / 2, canvas.height / 3);
+            if (estadoAtual == estados.jogando)
+
+                obstaculo.desenha();
+            chao.desenha();
+            bloco.desenha();
+
+            //aqui estou desenhando as mensagens do estado do jogo. quando perder, ou quando for pra jogar.
+            if (estadoAtual == estados.jogar)
+                jogar.desenha(LARGURA / 2 - jogar.largura / 2, ALTURA / 2 - jogar.altura / 2);
+
+            if (estadoAtual == estados.perdeu) {
+                perdeu.desenha(LARGURA / 2 - perdeu.largura / 2, ALTURA / 2 - perdeu.altura / 2 - spriteRecord.altura / 2)
+                spriteRecord.desenha(LARGURA / 2 - spriteRecord.largura / 2, ALTURA / 2 + perdeu.altura / 2 - spriteRecord.altura / 2 - 28);
+
+                ctx.fillStyle = "#fff";
+                ctx.fillText(bloco.score, 380, 330);
+                ctx.fillText(record, 390, 410);
+
+
+            }
+        }
+        //inicializar o jogo
+        main();
+    </script>
+    <a href="index.html"> <button class="btn btn-danger">Voltar</button></a>
+</body>
+
+</html>
